@@ -3,11 +3,12 @@ import type { Event, Integration as SentryIntegration } from '@sentry/core';
 import * as Sentry from '@sentry/react';
 import type { EventHint } from '@sentry/react';
 
-import { getConsentStatus, type PurposeMapping } from './zaraz';
 import { logEvent } from './eventLogger';
+import { SENTRY_DEFAULT_CONFIG } from './configurationKeys';
+import { buildTrackedConfigObject } from './utils';
 
 /**
- * Sentry Zaraz Consent Integration
+ * Sentry Consent Integration
  *
  * This integration provides comprehensive consent management for Sentry with a privacy-first approach, including:
  *
@@ -49,17 +50,14 @@ import { logEvent } from './eventLogger';
  *       blockAllMedia: true,      // Keep this true for privacy
  *       networkCaptureBodies: false, // Keep this false for privacy
  *     }),
- *     sentryZarazConsentIntegration({ ... })
+ *     sentryConsentIntegration({ ... })
  *   ]
  * });
  * ```
  *
  * The integration automatically adjusts Sentry configuration when consent changes,
  * ensuring compliance with privacy regulations while maintaining functionality.
- */ // Re-export types for convenience
-export type { PurposeMapping };
-export { zaraz } from 'zaraz-ts';
-export { getConsentStatus } from './zaraz';
+ */
 
 // Define Integration interface to match Sentry's interface
 export interface Integration extends SentryIntegration {
@@ -71,20 +69,6 @@ export interface Integration extends SentryIntegration {
   ): Event | null | PromiseLike<Event | null>;
 }
 
-export interface SentryZarazConsentIntegrationOptions {
-  /**
-   * Whether to log debug information to console
-   * @default false
-   */
-  debug?: boolean;
-
-  /**
-   * Purpose mapping for Zaraz consent purposes
-   * This is required and must match your Zaraz configuration
-   */
-  purposeMapping: PurposeMapping;
-}
-
 export interface ConsentState {
   functional?: boolean;
   analytics?: boolean;
@@ -92,37 +76,71 @@ export interface ConsentState {
   preferences?: boolean;
 }
 
-class SentryZarazConsentIntegrationClass implements Integration {
-  public static id = 'SentryZarazConsentIntegration';
-  public name = SentryZarazConsentIntegrationClass.id;
+export interface ConsentStateGetters {
+  functional?: () => boolean;
+  analytics?: () => boolean;
+  marketing?: () => boolean;
+  preferences?: () => boolean;
+}
 
-  private options: SentryZarazConsentIntegrationOptions & {
+export interface SentryConsentIntegrationOptions {
+  /**
+   * Whether to log debug information to console
+   * @default false
+   */
+  debug?: boolean;
+
+  /**
+   * Functions to get current consent state for each purpose
+   * Each function should return a boolean indicating consent status
+   * Only provide functions for purposes you want to track
+   */
+  consentStateGetters: ConsentStateGetters;
+
+  /**
+   * Function to listen for consent changes
+   * Should call the provided trigger function when consent changes
+   * Should return a cleanup function to remove the listener
+   */
+  onConsentChange: (trigger: () => void) => () => void;
+
+  /**
+   * Timeout in milliseconds to wait for initial consent state
+   * @default 30000 (30 seconds)
+   */
+  consentTimeout?: number;
+}
+
+class SentryConsentIntegrationClass implements Integration {
+  public static id = 'SentryConsentIntegration';
+  public name = SentryConsentIntegrationClass.id;
+
+  private options: SentryConsentIntegrationOptions & {
     debug: boolean;
+    consentTimeout: number;
   };
   private isConsentReady = false;
   private hasConsent = false;
   private eventQueue: Array<{ event: Event; hint: EventHint }> = [];
-  private consentChangeListener: (() => void) | null = null;
+  private consentChangeCleanup: (() => void) | null = null;
   private currentConsentState: ConsentState = {};
-  private warningTimeoutId: any = null;
-  private errorTimeoutId: any = null;
+  private timeoutId: any = null;
   private originalSentryConfig: any = {};
   private originalScopeData: any = {};
-  private currentSentryHub: any = null;
   private replayStoppedDueToUnsafeSettings = false;
 
-  constructor(options: SentryZarazConsentIntegrationOptions) {
+  constructor(options: SentryConsentIntegrationOptions) {
     this.options = {
       debug: false,
+      consentTimeout: 30000,
       ...options,
     };
   }
 
   public setupOnce(): void {
-    this.log('Setting up Sentry Zaraz Consent Integration');
+    this.log('Setting up Sentry Consent Integration');
 
-    // Capture current Sentry hub and initial configuration
-    this.currentSentryHub = Sentry.getCurrentHub();
+    // Capture initial configuration
     this.captureOriginalSentryConfig();
     this.captureOriginalScopeData();
 
@@ -173,82 +191,127 @@ class SentryZarazConsentIntegrationClass implements Integration {
   private initializeConsentMonitoring(): void {
     this.log('Initializing consent monitoring');
 
-    // Check if Zaraz is already available
-    if (window?.zaraz?.consent?.APIReady) {
-      this.log('Zaraz consent API is ready');
-      this.checkConsent();
-    } else {
-      this.log(
-        'Zaraz consent API not ready, listening for zarazConsentAPIReady event...'
-      );
+    try {
+      // Try to get initial consent state
+      const initialState = this.getConsentState();
+      this.log('Initial consent state retrieved', initialState);
+      this.handleConsentState(initialState);
+    } catch (error) {
+      this.log('Failed to get initial consent state, waiting...', error);
 
-      // Listen for Zaraz to become available
-      const handleZarazLoaded = () => {
-        const currentZaraz = window?.zaraz;
-        if (currentZaraz?.consent?.APIReady) {
-          this.log(
-            'Zaraz consent API became ready via zarazConsentAPIReady event'
-          );
-          this.checkConsent();
-          // Remove the event listener since we only need it once
-          document.removeEventListener(
-            'zarazConsentAPIReady',
-            handleZarazLoaded
-          );
-          // Clear warning and error timeouts since Zaraz is now ready
-          this.clearWarningAndErrorTimeouts();
-        }
-      };
-
-      document.addEventListener('zarazConsentAPIReady', handleZarazLoaded);
-
-      // Set warning timeout (20 seconds)
-      this.warningTimeoutId = setTimeout(() => {
-        console.warn(
-          '[SentryZarazConsentIntegration] Warning: Zaraz consent API not loaded after 20 seconds'
+      // Set timeout for consent determination
+      this.timeoutId = setTimeout(() => {
+        this.log(
+          `Warning: Consent state not determined after ${this.options.consentTimeout}ms`
         );
-        logEvent('Zaraz loading warning', {
-          message: 'Zaraz consent API not loaded after 20 seconds',
-          waitTime: 20000,
+        logEvent('Consent timeout warning', {
+          message: `Consent state not determined after ${this.options.consentTimeout}ms`,
+          waitTime: this.options.consentTimeout,
         });
-      }, 20000);
 
-      // Set error timeout (45 seconds)
-      this.errorTimeoutId = setTimeout(() => {
-        console.error(
-          '[SentryZarazConsentIntegration] Error: Zaraz consent API not loaded after 45 seconds'
-        );
-        logEvent('Zaraz loading error', {
-          message: 'Zaraz consent API not loaded after 45 seconds',
-          waitTime: 45000,
-        });
         // Fallback: proceed without consent after timeout
         this.isConsentReady = true;
         this.hasConsent = false;
         this.clearEventQueue();
-      }, 45000);
+      }, this.options.consentTimeout);
+    }
+
+    // Listen for consent changes
+    this.listenForConsentChanges();
+  }
+
+  private getConsentState(): ConsentState {
+    const { consentStateGetters } = this.options;
+    const state: ConsentState = {};
+
+    try {
+      if (consentStateGetters.functional) {
+        state.functional = consentStateGetters.functional();
+      }
+      if (consentStateGetters.analytics) {
+        state.analytics = consentStateGetters.analytics();
+      }
+      if (consentStateGetters.marketing) {
+        state.marketing = consentStateGetters.marketing();
+      }
+      if (consentStateGetters.preferences) {
+        state.preferences = consentStateGetters.preferences();
+      }
+    } catch (error) {
+      this.log('Error calling consent state getters', error);
+      throw error;
+    }
+
+    return state;
+  }
+
+  private listenForConsentChanges(): void {
+    try {
+      this.consentChangeCleanup = this.options.onConsentChange(() => {
+        const newConsentState = this.getConsentState();
+        const currentConsent = newConsentState.functional ?? false;
+
+        if (
+          currentConsent !== this.hasConsent ||
+          JSON.stringify(newConsentState) !==
+            JSON.stringify(this.currentConsentState)
+        ) {
+          this.log(
+            `Consent changed from ${this.hasConsent} to ${currentConsent}`
+          );
+          logEvent('Consent status changed', {
+            from: this.hasConsent,
+            to: currentConsent,
+            newState: newConsentState,
+            appliedSentryConfig: true,
+          });
+
+          this.hasConsent = currentConsent;
+          this.currentConsentState = newConsentState;
+
+          // Apply Sentry configuration changes based on new consent state
+          this.applySentryConfiguration(newConsentState);
+          this.updateIntegrationConfigs(newConsentState);
+
+          // Handle Session Replay state changes specifically
+          this.handleReplayConsentChange(
+            this.currentConsentState.preferences,
+            newConsentState.preferences
+          );
+
+          if (currentConsent) {
+            this.log('Consent granted, processing any new queued events');
+            void this.processQueuedEvents(); // Fire and forget async call
+          } else {
+            this.log('Consent revoked, future events will be blocked');
+          }
+        }
+      });
+
+      this.log('Listening for consent changes');
+    } catch (error) {
+      this.log('Failed to set up consent change listener', error);
     }
   }
 
-  private checkConsent(): void {
-    const currentConsentState = getConsentStatus(this.options.purposeMapping);
-    this.currentConsentState = currentConsentState;
-    const hasConsent = currentConsentState.functional;
+  private handleConsentState(consentState: ConsentState): void {
+    this.currentConsentState = consentState;
+    const hasConsent = consentState.functional ?? false;
     this.log(`Consent check result: ${hasConsent}`, this.currentConsentState);
 
     this.isConsentReady = true;
     this.hasConsent = hasConsent;
 
     // Apply Sentry configuration based on current consent state
-    this.applySentryConfiguration(currentConsentState);
-    this.updateIntegrationConfigs(currentConsentState);
+    this.applySentryConfiguration(consentState);
+    this.updateIntegrationConfigs(consentState);
 
     if (hasConsent) {
       this.log('Consent granted, processing queued events');
       logEvent('Consent granted', {
         queuedEvents: this.eventQueue.length,
         appliedSentryConfig: true,
-        consentState: currentConsentState,
+        consentState: consentState,
       });
       void this.processQueuedEvents(); // Fire and forget async call
     } else {
@@ -256,83 +319,25 @@ class SentryZarazConsentIntegrationClass implements Integration {
       logEvent('Consent denied', {
         discardedEvents: this.eventQueue.length,
         appliedSentryConfig: true,
-        consentState: currentConsentState,
+        consentState: consentState,
       });
       this.clearEventQueue();
     }
 
-    // Listen for consent changes
-    this.listenForConsentChanges();
-
-    // Clear warning and error timeouts since we have a consent status
-    this.clearWarningAndErrorTimeouts();
+    // Clear timeout since we have a consent status
+    this.clearTimeout();
   }
 
-  private listenForConsentChanges(): void {
-    // Listen for Zaraz consent changes using the proper event
-    this.consentChangeListener = () => {
-      const newConsentState = getConsentStatus(this.options.purposeMapping);
-      const currentConsent = newConsentState.functional;
-
-      if (
-        currentConsent !== this.hasConsent ||
-        JSON.stringify(newConsentState) !==
-          JSON.stringify(this.currentConsentState)
-      ) {
-        this.log(
-          `Consent changed from ${this.hasConsent} to ${currentConsent}`
-        );
-        logEvent('Consent status changed', {
-          from: this.hasConsent,
-          to: currentConsent,
-          newState: newConsentState,
-          appliedSentryConfig: true,
-        });
-
-        this.hasConsent = currentConsent;
-        this.currentConsentState = newConsentState;
-
-        // Apply Sentry configuration changes based on new consent state
-        this.applySentryConfiguration(newConsentState);
-        this.updateIntegrationConfigs(newConsentState);
-
-        // Handle Session Replay state changes specifically
-        this.handleReplayConsentChange(
-          this.currentConsentState.preferences,
-          newConsentState.preferences
-        );
-
-        if (currentConsent) {
-          this.log('Consent granted, processing any new queued events');
-          void this.processQueuedEvents(); // Fire and forget async call
-        } else {
-          this.log('Consent revoked, future events will be blocked');
-        }
-      }
-    };
-
-    // Listen for the zarazConsentChoicesUpdated event
-    document.addEventListener(
-      'zarazConsentChoicesUpdated',
-      this.consentChangeListener
-    );
-    this.log('Listening for zarazConsentChoicesUpdated events');
-  }
-
-  private clearWarningAndErrorTimeouts(): void {
-    if (this.warningTimeoutId) {
-      clearTimeout(this.warningTimeoutId);
-      this.warningTimeoutId = null;
-    }
-    if (this.errorTimeoutId) {
-      clearTimeout(this.errorTimeoutId);
-      this.errorTimeoutId = null;
+  private clearTimeout(): void {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
     }
   }
 
   private log(message: string, ...args: any[]): void {
     if (this.options.debug) {
-      console.log(`[SentryZarazConsentIntegration] ${message}`, ...args);
+      console.log(`[SentryConsentIntegration] ${message}`, ...args);
     }
   }
 
@@ -363,13 +368,11 @@ class SentryZarazConsentIntegrationClass implements Integration {
             // For message events
             Sentry.captureMessage(
               event.message || 'Queued message',
-              event.level as any
+              event.level
             );
           } else {
             // For other event types, try to use captureEvent if available
-            if ((Sentry as any).captureEvent) {
-              (Sentry as any).captureEvent(event, hint);
-            }
+            Sentry.captureEvent(event, hint);
           }
         } catch {
           // Silently fail in production - Sentry not available
@@ -387,52 +390,36 @@ class SentryZarazConsentIntegrationClass implements Integration {
 
   private captureOriginalScopeData(): void {
     // Capture the current scope data to preserve it for later restoration
-    const scope = this.currentSentryHub?.getScope();
-    if (scope) {
-      // Note: Sentry doesn't expose direct access to scope data,
-      // so we'll rely on the initialScope from the main Sentry.init call
-      // This is a limitation, but the main configuration should be set at the top level
-      this.originalScopeData = {
-        user: scope._user || null,
-        tags: scope._tags || {},
-        contexts: scope._contexts || {},
-      };
-    }
-    this.log('Captured original scope data', this.originalScopeData);
+    // Note: Sentry's new API doesn't expose direct access to scope internals
+    // We'll store what we can access through public methods
+    this.originalScopeData = {
+      user: null, // Will be captured when setUser is called
+      tags: {}, // Will be captured when setTag is called
+      contexts: {}, // Will be captured when setContext is called
+    };
+    this.log(
+      'Initialized original scope data tracking',
+      this.originalScopeData
+    );
   }
 
   private captureOriginalSentryConfig(): void {
     // Store original configuration from Sentry client
-    const client = this.currentSentryHub?.getClient();
+    const client = Sentry.getClient();
     if (client) {
       const options = client.getOptions();
-      this.originalSentryConfig = {
-        sendDefaultPii: options.sendDefaultPii,
-        maxBreadcrumbs: options.maxBreadcrumbs,
-        attachStacktrace: options.attachStacktrace,
-        sampleRate: options.sampleRate,
-        tracesSampleRate: options.tracesSampleRate,
-        beforeBreadcrumb: options.beforeBreadcrumb,
-        beforeSend: options.beforeSend,
-        beforeSendTransaction: options.beforeSendTransaction,
-        replaysSessionSampleRate: options.replaysSessionSampleRate,
-        replaysOnErrorSampleRate: options.replaysOnErrorSampleRate,
-        profilesSampleRate: options.profilesSampleRate,
-        autoSessionTracking: options.autoSessionTracking,
-      };
+
+      // Use utility to build tracked configuration object
+      this.originalSentryConfig = buildTrackedConfigObject(options as any);
+
+      // Also capture callback functions and other non-configuration options
+      this.originalSentryConfig.beforeBreadcrumb = options.beforeBreadcrumb;
+      this.originalSentryConfig.beforeSend = options.beforeSend;
+      this.originalSentryConfig.beforeSendTransaction =
+        options.beforeSendTransaction;
     } else {
       // Fallback to default values if no client found
-      this.originalSentryConfig = {
-        sendDefaultPii: false,
-        maxBreadcrumbs: 100,
-        attachStacktrace: false,
-        sampleRate: 1.0,
-        tracesSampleRate: 0.0,
-        replaysSessionSampleRate: 0.0,
-        replaysOnErrorSampleRate: 0.0,
-        profilesSampleRate: 0.0,
-        autoSessionTracking: true,
-      };
+      this.originalSentryConfig = { ...SENTRY_DEFAULT_CONFIG };
     }
     this.log(
       'Captured original Sentry configuration',
@@ -443,7 +430,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
   private applySentryConfiguration(consentState: ConsentState): void {
     this.log('Applying Sentry configuration based on consent', consentState);
 
-    const client = this.currentSentryHub?.getClient();
+    const client = Sentry.getClient();
     if (!client) {
       this.log('No Sentry client found, cannot apply configuration');
       return;
@@ -534,7 +521,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
   }
 
   private updateSentryScope(hasMarketingConsent: boolean): void {
-    const scope = this.currentSentryHub?.getScope();
+    const scope = Sentry.getCurrentScope();
     if (!scope) return;
 
     if (!hasMarketingConsent) {
@@ -572,7 +559,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
 
       if (tags) {
         Object.entries(tags).forEach(([key, value]) => {
-          scope.setTag(key, value);
+          scope.setTag(key, value as any);
         });
         this.log(
           'Restored marketing tags for A/B testing and campaign tracking'
@@ -581,7 +568,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
 
       if (contexts) {
         Object.entries(contexts).forEach(([key, value]) => {
-          scope.setContext(key, value);
+          scope.setContext(key, value as any);
         });
       }
 
@@ -614,83 +601,85 @@ class SentryZarazConsentIntegrationClass implements Integration {
 
   private validateReplayPrivacySettings(): void {
     // Check if Replay integration is configured and warn about potentially unsafe settings
-    const client = this.currentSentryHub?.getClient();
+    const client = Sentry.getClient();
     if (!client) return;
 
     try {
-      // Access integrations to check for replay configuration
-      // In Sentry v8, integrations are accessed via the options object
-      const options = client.getOptions();
-      const integrations = options.integrations || [];
+      const replay = Sentry.getReplay();
+      if (!replay) {
+        this.log('No replay instance found');
+        return;
+      }
 
-      // Debug: log integration information
-      this.log('Available integrations', {
-        count: Array.isArray(integrations)
-          ? integrations.length
-          : Object.keys(integrations).length,
-        names: Array.isArray(integrations)
-          ? integrations
-              .map((i: any) => i.name || i.constructor?.name)
-              .filter(Boolean)
-          : Object.keys(integrations),
+      const replayAny = replay as any;
+      const recordingOptions = replayAny._recordingOptions;
+      const initialOptions = replayAny._initialOptions;
+
+      // Use recording options if available, fallback to initial options
+      const replayOptions = recordingOptions || initialOptions;
+
+      if (!replayOptions) {
+        this.log(
+          'No replay options found in _recordingOptions or _initialOptions'
+        );
+        return;
+      }
+
+      this.log('Checking replay privacy settings', {
+        hasRecordingOptions: !!recordingOptions,
+        hasInitialOptions: !!initialOptions,
+        usingOptions: recordingOptions ? 'recordingOptions' : 'initialOptions',
       });
 
-      // Find replay integration
-      const replayIntegration = Array.isArray(integrations)
-        ? integrations.find(
-            (integration: any) =>
-              integration.name === 'Replay' ||
-              integration.constructor?.name === 'Replay' ||
-              integration.constructor?.name === 'ReplayIntegration'
-          )
-        : integrations['Replay'];
+      // Check for potentially unsafe settings
+      const warnings: string[] = [];
 
-      if (replayIntegration && replayIntegration.getOptions) {
-        const replayOptions = replayIntegration.getOptions();
+      if (replayOptions.maskAllText === false) {
+        warnings.push(
+          'maskAllText: false (text content will be visible in recordings)'
+        );
+      }
 
-        // Check for potentially unsafe settings
-        const warnings: string[] = [];
+      if (replayOptions.maskAllInputs === false) {
+        warnings.push(
+          'maskAllInputs: false (input values will be visible in recordings)'
+        );
+      }
 
-        if (replayOptions.maskAllText === false) {
-          warnings.push(
-            'maskAllText: false (text content will be visible in recordings)'
-          );
-        }
+      if (replayOptions.blockAllMedia === false) {
+        warnings.push('blockAllMedia: false (media content will be recorded)');
+      }
 
-        if (replayOptions.maskAllInputs === false) {
-          warnings.push(
-            'maskAllInputs: false (input values will be visible in recordings)'
-          );
-        }
+      if (replayOptions.networkCaptureBodies === true) {
+        warnings.push(
+          'networkCaptureBodies: true (request/response bodies will be captured)'
+        );
+      }
 
-        if (replayOptions.blockAllMedia === false) {
-          warnings.push(
-            'blockAllMedia: false (media content will be recorded)'
-          );
-        }
+      if (warnings.length > 0) {
+        this.log('Session Replay privacy warnings', {
+          warnings,
+          replayOptions,
+        });
 
-        if (replayOptions.networkCaptureBodies === true) {
-          warnings.push(
-            'networkCaptureBodies: true (request/response bodies will be captured)'
-          );
-        }
-
-        if (warnings.length > 0) {
-          console.warn(
-            '[SentryZarazConsentIntegration] Privacy Warning: Session Replay has potentially unsafe settings:',
-            warnings
-          );
-          this.log('Session Replay privacy warnings', { warnings });
-          // Stop replay recording and track that we did so due to unsafe settings
-          replayIntegration.stopRecording();
+        // Stop replay recording and track that we did so due to unsafe settings
+        if (typeof replayAny.stopRecording === 'function') {
+          replayAny.stopRecording();
           this.replayStoppedDueToUnsafeSettings = true;
           this.log('Session Replay stopped due to unsafe privacy settings');
         } else {
-          this.log('Session Replay appears to be using privacy-safe settings');
-          // If we previously stopped due to unsafe settings, but now settings are safe, resume
-          if (this.replayStoppedDueToUnsafeSettings) {
-            this.attemptReplayResume(replayIntegration);
-          }
+          this.log(
+            'Cannot stop replay recording - stopRecording method not available'
+          );
+        }
+      } else {
+        this.log('Session Replay appears to be using privacy-safe settings', {
+          replayOptions,
+        });
+
+        // If we previously stopped due to unsafe settings, but now settings are safe, resume
+        if (this.replayStoppedDueToUnsafeSettings) {
+          this.attemptReplayResume(replayAny);
         }
       }
     } catch (error) {
@@ -708,31 +697,21 @@ class SentryZarazConsentIntegrationClass implements Integration {
     }
   }
 
-  private attemptReplayResume(replayIntegration: any): void {
+  private attemptReplayResume(replayInstance: any): void {
     try {
       // Try to start a new recording session
-      if (typeof replayIntegration.startRecording === 'function') {
-        replayIntegration.startRecording();
+      if (typeof replayInstance.startRecording === 'function') {
+        replayInstance.startRecording();
         this.replayStoppedDueToUnsafeSettings = false;
         this.log('Session Replay resumed - privacy settings are now safe');
-        console.log(
-          '[SentryZarazConsentIntegration] Session Replay resumed with safe privacy settings'
-        );
       } else {
         // Fallback: log that manual intervention may be needed
         this.log(
-          'Cannot automatically resume Session Replay - manual restart may be required'
-        );
-        console.warn(
-          '[SentryZarazConsentIntegration] Cannot automatically resume Session Replay. Consider restarting the application or manually managing replay state.'
+          'Cannot automatically resume Session Replay - startRecording method not available'
         );
       }
     } catch (error) {
       this.log('Failed to resume Session Replay recording', { error });
-      console.warn(
-        '[SentryZarazConsentIntegration] Failed to resume Session Replay recording:',
-        error
-      );
     }
   }
 
@@ -758,28 +737,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
       );
 
       // Re-validate privacy settings to see if we can resume
-      const client = this.currentSentryHub?.getClient();
-      if (client) {
-        try {
-          const options = client.getOptions();
-          const integrations = options.integrations || [];
-          const replayIntegration = Array.isArray(integrations)
-            ? integrations.find(
-                (integration: any) =>
-                  integration.name === 'Replay' ||
-                  integration.constructor?.name === 'Replay' ||
-                  integration.constructor?.name === 'ReplayIntegration'
-              )
-            : integrations['Replay'];
-
-          if (replayIntegration) {
-            // This will check settings and potentially resume if they're now safe
-            this.validateReplayPrivacySettings();
-          }
-        } catch (error) {
-          this.log('Could not check replay integration for resume', { error });
-        }
-      }
+      this.validateReplayPrivacySettings();
     }
 
     // If preferences consent was revoked, reset the stopped flag
@@ -828,20 +786,37 @@ class SentryZarazConsentIntegrationClass implements Integration {
   }
 
   public cleanup(): void {
-    this.clearWarningAndErrorTimeouts();
+    this.clearTimeout();
 
-    if (this.consentChangeListener) {
-      document.removeEventListener(
-        'zarazConsentChoicesUpdated',
-        this.consentChangeListener
-      );
-      this.consentChangeListener = null;
+    if (this.consentChangeCleanup) {
+      this.consentChangeCleanup();
+      this.consentChangeCleanup = null;
     }
 
     this.clearEventQueue();
 
     // Reset replay state tracking
     this.replayStoppedDueToUnsafeSettings = false;
+  }
+
+  /**
+   * Get the original Sentry configuration that was captured during initialization
+   * This provides access to the user's original configuration before any consent-based modifications
+   *
+   * @returns The original Sentry configuration object
+   */
+  public getOriginalSentryConfig(): any {
+    return { ...this.originalSentryConfig };
+  }
+
+  /**
+   * Get the original scope data that was captured during initialization
+   * This provides access to the user's original scope data before any consent-based modifications
+   *
+   * @returns The original scope data object
+   */
+  public getOriginalScopeData(): any {
+    return { ...this.originalScopeData };
   }
 
   /**
@@ -876,7 +851,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
 }
 
 /**
- * Creates a new Sentry Zaraz Consent Integration instance for use in integrations array
+ * Creates a new Sentry Consent Integration instance for use in integrations array
  *
  * @param options Configuration options for the integration
  * @returns Integration instance that can be added to Sentry's integrations array
@@ -899,12 +874,18 @@ class SentryZarazConsentIntegrationClass implements Integration {
  *       stickySession: true,         // Can be enabled as it doesn't expose PII
  *     }),
  *     // The consent integration will control when replay is active via sample rates
- *     sentryZarazConsentIntegration({
- *       purposeMapping: {
- *         functional: 'essential',
- *         analytics: 'analytics',
- *         preferences: 'personalization', // Controls Session Replay
- *         marketing: 'marketing'
+ *     sentryConsentIntegration({
+ *       consentStateGetters: {
+ *         functional: () => myConsentManager.hasConsent('functional'),
+ *         analytics: () => myConsentManager.hasConsent('analytics'),
+ *         preferences: () => myConsentManager.hasConsent('preferences'),
+ *         marketing: () => myConsentManager.hasConsent('marketing')
+ *       },
+ *       onConsentChange: (trigger) => {
+ *         // Set up listener for consent changes in your consent management platform
+ *         const listener = () => trigger(); // Call trigger when consent changes
+ *         myConsentManager.addEventListener('consentchange', listener);
+ *         return () => myConsentManager.removeEventListener('consentchange', listener);
  *       },
  *       debug: true
  *     })
@@ -915,7 +896,7 @@ class SentryZarazConsentIntegrationClass implements Integration {
  * const client = Sentry.getClient();
  * const options = client?.getOptions();
  * const consentIntegration = options?.integrations?.find(
- *   (i: any) => i.name === 'SentryZarazConsentIntegration'
+ *   (i: any) => i.name === 'SentryConsentIntegration'
  * );
  * if (consentIntegration?.checkAndResumeReplay) {
  *   const resumed = consentIntegration.checkAndResumeReplay();
@@ -923,18 +904,28 @@ class SentryZarazConsentIntegrationClass implements Integration {
  * }
  * ```
  */
-export function sentryZarazConsentIntegration(
-  options: SentryZarazConsentIntegrationOptions
+export function sentryConsentIntegration(
+  options: SentryConsentIntegrationOptions
 ): Integration {
-  const integration = new SentryZarazConsentIntegrationClass(options);
+  const integration = new SentryConsentIntegrationClass(options);
 
   return {
     name: integration.name,
     setupOnce: () => integration.setupOnce(),
     processEvent: (event: Event, hint: EventHint) =>
       integration.processEvent(event, hint),
+    // Expose additional methods for accessing original configuration
+    getOriginalSentryConfig: () => integration.getOriginalSentryConfig(),
+    getOriginalScopeData: () => integration.getOriginalScopeData(),
+    checkAndResumeReplay: () => integration.checkAndResumeReplay(),
+    cleanup: () => integration.cleanup(),
+  } as Integration & {
+    getOriginalSentryConfig(): any;
+    getOriginalScopeData(): any;
+    checkAndResumeReplay(): boolean;
+    cleanup(): void;
   };
 }
 
 // Export the class for advanced use cases
-export { SentryZarazConsentIntegrationClass };
+export { SentryConsentIntegrationClass };

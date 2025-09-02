@@ -1,12 +1,13 @@
 {
-  "name": "sentry-zaraz-consent-demo",
-  "version": "1.0.0",
+  "name": "sentry-consent-demo",
+  "version": "2.0.0",
   "type": "module",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@sentry/browser": "^8.29.0",
@@ -15,14 +16,14 @@
     "@vitejs/plugin-react": "^5.0.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "sentry-zaraz-consent-integration": "file:..",
-    "zaraz-ts": "^1.2.0"
+    "sentry-consent-integration": "file:.."
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.1",
     "fake-cloudflare-zaraz-consent": "^1.3.1",
+    "patch-package": "^8.0.0",
     "tailwindcss": "^4.0.1",
     "typescript": "^5.9.2",
-    "vite": "^5.4.1"
+    "vite": "^7.1.4"
   }
 }

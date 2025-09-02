@@ -1,6 +1,5 @@
+import { zaraz } from 'zaraz-ts';
 import { useState, useEffect, useCallback } from 'react';
-import { getConsentStatus, zaraz } from 'sentry-zaraz-consent-integration';
-import { purposeMapping } from '../fake-zaraz.js';
 
 interface ConsentState {
   functional: boolean;
@@ -26,17 +25,23 @@ export const useZarazConsentShortcuts = () => {
 
   const monitorConsentChanges = useCallback(() => {
     try {
-      const newConsent = getConsentStatus(purposeMapping);
+      const newConsent = {
+        functional: zaraz.consent.get('YYY') ?? false,
+        analytics: zaraz.consent.get('USeX') ?? false,
+        marketing: zaraz.consent.get('dqVA') ?? false,
+        preferences: zaraz.consent.get('NNN') ?? false,
+      };
       setCurrentConsent(newConsent);
-      setCurrentConsentCheboxes(zaraz?.consent?.getAllCheckboxes?.() ?? {});
-      console.log('📋 Consent updated from Zaraz:', newConsent);
+      const windowZaraz = (window as any).zaraz;
+      setCurrentConsentCheboxes(
+        windowZaraz?.consent?.getAllCheckboxes?.() ?? {}
+      );
     } catch (error) {
-      console.warn('⚠️ Failed to read consent from Zaraz:', error);
+      // Failed to read consent from Zaraz
     }
-  }, [purposeMapping]);
+  }, []);
 
   const showConsentDialog = useCallback(() => {
-    console.log('🔧 Showing consent dialog...');
     const zaraz = (window as any).zaraz;
     if (zaraz?.showConsentModal) {
       zaraz.showConsentModal();
@@ -45,14 +50,13 @@ export const useZarazConsentShortcuts = () => {
     } else if (zaraz?.consent?.show) {
       zaraz.consent.show();
     } else {
-      console.warn('⚠️ Zaraz consent dialog not available');
+      // Zaraz consent dialog not available
     }
   }, []);
 
   // Listen for consent changes
   useEffect(() => {
     const handleConsentChange = () => {
-      console.log('📡 Received zarazConsentChoicesUpdated event');
       monitorConsentChanges();
     };
 
@@ -89,6 +93,5 @@ export const useZarazConsentShortcuts = () => {
     currentConsentCheckboxes,
     isConsentApiReady,
     showConsentDialog,
-    monitorConsentChanges,
   };
 };

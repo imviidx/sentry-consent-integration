@@ -1,5 +1,4 @@
 import { initFakeZaraz } from 'fake-cloudflare-zaraz-consent';
-import { type PurposeMapping } from 'sentry-zaraz-consent-integration';
 
 // Fake purposes, aka CF Consent
 const purposes = [
@@ -32,7 +31,7 @@ const purposes = [
   },
 ];
 
-export const purposeMapping: PurposeMapping = {
+export const purposeMapping = {
   functional: ['YYY'], // Depends on CF purpose with id=YYY
   analytics: ['USeX'], // Depends on CF purpose with id=USeX
   marketing: ['dqVA'], // Depends on CF purpose with id=dqVA
@@ -47,4 +46,5 @@ export const initFakeZarazShort = () =>
     purposes: purposes,
     // deselect all by default
     defaultConsent: { YYY: false, USeX: false, dqVA: false, NNN: false },
+    cookieName: 'sentry-consent-integration-demo-fake-zaraz-consent',
   });

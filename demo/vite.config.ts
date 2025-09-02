@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/sentry-zaraz-consent-integration/',
+  base: '/sentry-consent-integration/',
   publicDir: 'public',
   server: {
     port: 3000,

@@ -9,7 +9,6 @@ export const SentryToolbox: React.FC<SentryToolboxProps> = ({
   className = '',
 }) => {
   const testError = () => {
-    console.log('🧪 Testing Sentry error capture...');
     try {
       throw new Error('This is a test error from the demo ' + Math.random());
     } catch (error) {
@@ -18,19 +17,16 @@ export const SentryToolbox: React.FC<SentryToolboxProps> = ({
   };
 
   const testMessage = () => {
-    console.log('🧪 Testing Sentry message capture...');
     Sentry.captureMessage('This is a test message from the demo', 'info');
   };
 
   const testTransaction = () => {
-    console.log('🧪 Testing Sentry transaction...');
     Sentry.startSpan({ name: 'demo-transaction', op: 'demo' }, () => {
-      console.log('✅ Transaction completed');
+      // Transaction completed
     });
   };
 
   const addBreadcrumb = () => {
-    console.log('🧪 Adding Sentry breadcrumb...');
     Sentry.addBreadcrumb({
       message: 'Demo breadcrumb added',
       category: 'demo',
@@ -40,7 +36,6 @@ export const SentryToolbox: React.FC<SentryToolboxProps> = ({
   };
 
   const setUserInfo = () => {
-    console.log('🧪 Setting Sentry user info...');
     Sentry.setUser({
       id: 'demo-user-123',
       email: 'demo@example.com',

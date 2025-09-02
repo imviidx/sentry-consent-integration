@@ -1,5 +1,160 @@
 # Changelog
 
+## [Unreleased]
+
+### 🔧 Fixed
+
+- **Sentry API Migration**: Fixed deprecation warnings for `getCurrentHub()`
+  - Replaced deprecated `Sentry.getCurrentHub()` calls with modern `Sentry.getClient()` and `Sentry.getCurrentScope()`
+  - Updated both main integration and demo components to use the new Sentry v8+ API
+  - Removed dependency on deprecated Hub API throughout the codebase
+  - Improved type safety by using proper Sentry client and scope interfaces
+  - **Migration Impact**: No breaking changes for consumers - this is purely an internal modernization
+
+## [2.0.0] - 2025-09-02
+
+### 🚨 Breaking Changes - Generic Consent Integration
+
+This is a major refactor that transforms the package from a Zaraz-specific implementation to a generic consent management integration that works with any consent platform.
+
+#### Package Renamed
+
+- **Package name**: `sentry-zaraz-consent-integration` → `sentry-consent-integration`
+- **Repository**: Updated URLs and references throughout
+- **Keywords**: Removed "zaraz" references, added "privacy"
+
+#### API Changes
+
+- **Integration function**: `sentryZarazConsentIntegration()` → `sentryConsentIntegration()`
+- **Integration class**: `SentryZarazConsentIntegrationClass` → `SentryConsentIntegrationClass`
+- **Options interface**: `SentryZarazConsentIntegrationOptions` → `SentryConsentIntegrationOptions`
+
+### 🚀 New Generic API - Getter-Based Consent with Trigger Functions
+
+#### Platform-Agnostic Approach
+
+The integration now uses a callback-based approach that works with any consent management platform:
+
+```typescript
+// NEW API - Works with any consent platform
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => myConsentTool.isGranted('essential'),
+    analytics: () => myConsentTool.isGranted('analytics'),
+    marketing: () => myConsentTool.isGranted('marketing'),
+    preferences: () => myConsentTool.isGranted('preferences'),
+  },
+  onConsentChange: (trigger) => {
+    const cleanup = myConsentTool.onChange(() => trigger());
+    return cleanup;
+  },
+  debug: true,
+});
+```
+
+#### Benefits of New Approach
+
+- **Platform Agnostic**: Works with any consent management platform (Cookiebot, OneTrust, Zaraz, custom solutions, etc.)
+- **No Polling**: Eliminated automatic polling for better performance
+- **Explicit Getters**: Each consent purpose has its own getter function
+- **Event-Driven**: Updates only happen when `trigger()` is called
+- **Better Control**: Consumers have full control over when consent is checked
+- **Cleaner API**: Separation between getting current state and listening for changes
+
+#### Removed Dependencies
+
+- **Removed**: All platform-specific dependencies (no longer tied to any particular consent platform)
+- **Clean dependencies**: Only Sentry SDK peer dependencies remain
+
+### ️ Architecture Improvements
+
+#### Generic Integration Core
+
+- **Platform agnostic**: Works with any consent management platform (Cookiebot, OneTrust, Zaraz, custom solutions)
+- **Getter-based**: Precise architecture using individual getter functions for each purpose
+- **Trigger-based**: Event-driven updates only when trigger function is called
+- **Timeout configurable**: Customizable consent determination timeout (default: 30s)
+- **Better error handling**: Improved error handling and fallback behavior
+
+#### File Structure Changes
+
+```
+src/
+├── index.ts                    # Main exports
+├── SentryConsentIntegration.ts # Generic consent integration (NEW)
+└── eventLogger.ts              # Logging utilities
+
+# REMOVED FILES:
+# ├── SentryZarazConsentIntegration.ts (replaced by generic version)
+# ├── zaraz.ts (replaced by user-implemented callbacks)
+```
+
+#### Export Structure
+
+- **Main package**: Generic consent integration and types only
+- **Platform helpers**: Users implement their own based on their consent platform
+- **Clean separation**: No platform-specific code in the core package
+
+### 🎯 Migration Guide
+
+#### Migration to Generic API
+
+The new version requires implementing your own consent getters and change listeners for your specific platform:
+
+```typescript
+// Before (v1.x - Zaraz-specific)
+import { sentryZarazConsentIntegration } from 'sentry-zaraz-consent-integration';
+
+sentryZarazConsentIntegration({
+  purposeMapping: {
+    functional: ['essential'],
+    analytics: ['analytics'],
+    marketing: ['marketing'],
+    preferences: ['preferences'],
+  },
+  debug: true,
+});
+
+// After (v2.0 - Generic, example with Cookiebot)
+import { sentryConsentIntegration } from 'sentry-consent-integration';
+
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => window.Cookiebot?.consent?.necessary ?? false,
+    analytics: () => window.Cookiebot?.consent?.statistics ?? false,
+    marketing: () => window.Cookiebot?.consent?.marketing ?? false,
+    preferences: () => window.Cookiebot?.consent?.preferences ?? false,
+  },
+  onConsentChange: (trigger) => {
+    window.addEventListener('CookiebotOnConsentReady', trigger);
+    return () => window.removeEventListener('CookiebotOnConsentReady', trigger);
+  },
+  debug: true,
+});
+```
+
+#### Platform-Specific Implementations
+
+Users need to implement callbacks for their specific consent management platform. See README for examples with popular platforms like:
+
+- Cookiebot
+- OneTrust
+- Cloudflare Zaraz
+- Custom consent solutions
+
+### 🧹 Cleanup
+
+- **Removed platform-specific code**: All consent platform-specific references removed from core integration
+- **Cleaner codebase**: Complete separation of concerns - core integration is now truly generic
+- **Better maintainability**: No platform-specific dependencies or helpers in the core package
+- **Future-ready**: Users can implement helpers for any consent platform without core package changes
+
+---
+
+- **Integration function**: `sentryZarazConsentIntegration()` → `sentryConsentIntegration()`
+- **Integration class**: `SentryZarazConsentIntegrationClass` → `SentryConsentIntegrationClass`
+- **Options interface**: `SentryZarazConsentIntegrationOptions` → `SentryConsentIntegrationOptions`
+
 ## [1.2.0] - 2025-09-02
 
 ### Enhanced Privacy Compliance 🛡️

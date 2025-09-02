@@ -1,55 +1,186 @@
-# Sentry Zaraz Consent Integration
+# Sentry Consent Integration
 
-[![npm version](https://badge.fury.io/js/sentry-zaraz-consent-integration.svg)](https://badge.fury.io/js/sentry-zaraz-consent-integration)
+[![npm version](https://badge.fury.io/js/sentry-consent-integration.svg)](https://badge.fury.io/js/sentry-consent-integration)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-A TypeScript integration that dynamically adjusts Sentry configuration based on Cloudflare Zaraz consent preferences, ensuring GDPR and privacy compliance while maintaining optimal error tracking and performance monitoring.
+A TypeScript integration that dynamically adjusts Sentry configuration based on user consent preferences, ensuring GDPR and privacy compliance while maintaining optimal error tracking and performance monitoring.
 
-**🌐 [Live Demo](https://pod666.github.io/sentry-zaraz-consent-integration/)**
+**🌐 [Live Demo](https://pod666.github.io/sentry-consent-integration/)**
+
+## What's New in 2.0.0
+
+🚨 **Major Breaking Changes**: This release transforms the package from Zaraz-specific to a **generic consent integration** that works with any consent management platform.
+
+### Key Changes
+
+- **Package Renamed**: `sentry-zaraz-consent-integration` → `sentry-consent-integration`
+- **Generic API**: Now works with any consent platform through callback functions
+- **Platform Agnostic**: No longer tied to Cloudflare Zaraz or any specific platform
+- **Getter-Based Architecture**: Uses individual getter functions for better control
+- **Cleaner Dependencies**: Removed all platform-specific dependencies, only peer dependencies remain
+
+### Migration Path
+
+The new generic API requires you to implement your own consent getters and change listeners for your specific consent management platform:
+
+```typescript
+// Before (v1.x - Zaraz-specific)
+import { sentryZarazConsentIntegration } from 'sentry-zaraz-consent-integration';
+
+// After (v2.0 - Generic, works with any platform)
+import { sentryConsentIntegration } from 'sentry-consent-integration';
+
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => yourConsentPlatform.hasConsent('functional'),
+    analytics: () => yourConsentPlatform.hasConsent('analytics'),
+    marketing: () => yourConsentPlatform.hasConsent('marketing'),
+    preferences: () => yourConsentPlatform.hasConsent('preferences'),
+  },
+  onConsentChange: (trigger) => {
+    const cleanup = yourConsentPlatform.onChange(() => trigger());
+    return cleanup;
+  },
+});
+```
 
 ## Features
 
-- **🎯 Purpose-based Configuration**: predefined Map Zaraz consent purposes to specific Sentry features
+- **🎯 Generic Consent Management**: Works with any consent management platform through callbacks
 - **⚡ Real-time Updates**: Automatically adjust Sentry settings when consent changes
 - **📦 Event Queuing**: Queue events during consent determination, process when granted
 - **🛡️ Privacy Compliant**: Respect user consent for different data processing purposes
-- **🔧 Configurable**: Flexible purpose mapping and timeout settings
+- **🔧 Configurable**: Flexible callback-based architecture with timeout settings
 - **📊 Debug Support**: Comprehensive logging for troubleshooting
+- **🌐 Platform Agnostic**: Not tied to any specific consent management platform
 
 ## Quick Start
 
 ### Installation
 
 ```bash
-npm install sentry-zaraz-consent-integration
+npm install sentry-consent-integration
 ```
 
 **Note**: This package requires `@sentry/react` (or another Sentry SDK) and `@sentry/types` as peer dependencies in your project.
 
 ### Basic Usage
 
-Given following purposes configured in CLoudflare:
-![cloudflare purposes example screenshot](cf-screenshot.png)
-
-Then `purposeMapping` would look like this:
-
 ```typescript
-import { sentryZarazConsentIntegration } from 'sentry-zaraz-consent-integration';
+import { sentryConsentIntegration } from 'sentry-consent-integration';
 import * as Sentry from '@sentry/react';
 
 Sentry.init({
   dsn: 'your-sentry-dsn',
   integrations: [
-    sentryZarazConsentIntegration({
-      purposeMapping: {
-        functional: ['dqVA'], // requires dqVA consent to be selected
-        analytics: ['USeX'],
-        marketing: true, // always enabled
-        preferences: false, // always disabled
+    sentryConsentIntegration({
+      consentStateGetters: {
+        functional: () => myConsentTool.isGranted('essential'),
+        analytics: () => myConsentTool.isGranted('analytics'),
+        marketing: () => myConsentTool.isGranted('marketing'),
+        preferences: () => myConsentTool.isGranted('preferences'),
+      },
+      onConsentChange: (trigger) => {
+        const cleanup = myConsentTool.onChange(() => trigger());
+        return cleanup;
       },
       debug: true, // Enable debug logging
     }),
   ],
+});
+```
+
+## Platform Examples
+
+The generic API allows you to integrate with any consent management platform. Here are examples for popular platforms:
+
+### Cookiebot
+
+```typescript
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => window.Cookiebot?.consent?.necessary ?? false,
+    analytics: () => window.Cookiebot?.consent?.statistics ?? false,
+    marketing: () => window.Cookiebot?.consent?.marketing ?? false,
+    preferences: () => window.Cookiebot?.consent?.preferences ?? false,
+  },
+  onConsentChange: (trigger) => {
+    window.addEventListener('CookiebotOnConsentReady', trigger);
+    window.addEventListener('CookiebotOnDialogDisplay', trigger);
+    return () => {
+      window.removeEventListener('CookiebotOnConsentReady', trigger);
+      window.removeEventListener('CookiebotOnDialogDisplay', trigger);
+    };
+  },
+});
+```
+
+### OneTrust
+
+```typescript
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () =>
+      window.OneTrust?.IsAlertBoxClosed() &&
+      window.OnetrustActiveGroups?.includes('C0001'),
+    analytics: () =>
+      window.OneTrust?.IsAlertBoxClosed() &&
+      window.OnetrustActiveGroups?.includes('C0002'),
+    marketing: () =>
+      window.OneTrust?.IsAlertBoxClosed() &&
+      window.OnetrustActiveGroups?.includes('C0004'),
+    preferences: () =>
+      window.OneTrust?.IsAlertBoxClosed() &&
+      window.OnetrustActiveGroups?.includes('C0003'),
+  },
+  onConsentChange: (trigger) => {
+    window.addEventListener('OneTrustGroupsUpdated', trigger);
+    return () => window.removeEventListener('OneTrustGroupsUpdated', trigger);
+  },
+});
+```
+
+### Cloudflare Zaraz
+
+```typescript
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => window.zaraz?.consent?.get('functional') ?? false,
+    analytics: () => window.zaraz?.consent?.get('analytics') ?? false,
+    marketing: () => window.zaraz?.consent?.get('marketing') ?? false,
+    preferences: () => window.zaraz?.consent?.get('preferences') ?? false,
+  },
+  onConsentChange: (trigger) => {
+    document.addEventListener('zarazConsentChoicesUpdated', trigger);
+    document.addEventListener('zarazConsentAPIReady', trigger);
+    return () => {
+      document.removeEventListener('zarazConsentChoicesUpdated', trigger);
+      document.removeEventListener('zarazConsentAPIReady', trigger);
+    };
+  },
+});
+```
+
+### Custom Consent Management
+
+```typescript
+// For your own custom consent management solution
+sentryConsentIntegration({
+  consentStateGetters: {
+    functional: () => localStorage.getItem('consent-functional') === 'true',
+    analytics: () => localStorage.getItem('consent-analytics') === 'true',
+    marketing: () => localStorage.getItem('consent-marketing') === 'true',
+    preferences: () => localStorage.getItem('consent-preferences') === 'true',
+  },
+  onConsentChange: (trigger) => {
+    const listener = (event) => {
+      if (event.key?.startsWith('consent-')) {
+        trigger();
+      }
+    };
+    window.addEventListener('storage', listener);
+    return () => window.removeEventListener('storage', listener);
+  },
 });
 ```
 
@@ -68,15 +199,35 @@ The integration supports four consent categories that map to different Sentry fe
 
 ## Configuration
 
-### SentryZarazConsentIntegrationOptions
+### SentryConsentIntegrationOptions
 
 ```typescript
-interface SentryZarazConsentIntegrationOptions {
+interface ConsentStateGetters {
+  functional: () => boolean;
+  analytics: () => boolean;
+  marketing: () => boolean;
+  preferences: () => boolean;
+}
+
+interface SentryConsentIntegrationOptions {
   /**
-   * Purpose mapping for Zaraz consent purposes
-   * Maps consent categories to Zaraz purpose IDs
+   * Object containing getter functions for each consent purpose
+   * Each getter should return a boolean indicating current consent status
    */
-  purposeMapping: PurposeMapping;
+  consentStateGetters: ConsentStateGetters;
+
+  /**
+   * Function to listen for consent changes
+   * Should call the provided trigger function when consent changes
+   * Should return a cleanup function to remove the listener
+   */
+  onConsentChange: (trigger: () => void) => () => void;
+
+  /**
+   * Timeout in milliseconds to wait for initial consent state
+   * @default 30000 (30 seconds)
+   */
+  consentTimeout?: number;
 
   /**
    * Enable debug logging
@@ -86,18 +237,16 @@ interface SentryZarazConsentIntegrationOptions {
 }
 ```
 
-### Purpose Mapping Structure
+### Consent State Structure
 
 ```typescript
-interface PurposeMapping {
-  functional?: string[]; // Core functionality
-  analytics?: string[]; // Performance monitoring and detailed context
-  preferences?: string[]; // PII and session replay (privacy-sensitive)
-  marketing?: string[]; // User identification and behavioral analysis
+interface ConsentState {
+  functional?: boolean; // Core functionality
+  analytics?: boolean; // Performance monitoring and detailed context
+  preferences?: boolean; // PII and session replay (privacy-sensitive)
+  marketing?: boolean; // User identification and behavioral analysis
 }
 ```
-
-> **Marketing Purpose Note**: The `marketing` purpose is primarily used for user identification within `initialScope` (such as setting `user.id`, custom tags for A/B testing, or campaign tracking), feature flag integrations, and analytics cohorts. This distinguishes it from the `preferences` purpose, which deals with collecting raw PII and detailed screen recordings.
 
 ## Integration Behavior
 
@@ -164,13 +313,13 @@ npm run demo:build
 
 ```
 ├── src/
-│   ├── SentryZarazConsentIntegration.ts  # Main integration
-│   ├── zaraz.ts                          # Zaraz consent utilities
+│   ├── index.ts                          # Main exports
+│   ├── SentryConsentIntegration.ts       # Generic consent integration
 │   └── eventLogger.ts                    # Logging utilities
 ├── demo/
 │   ├── index.html                        # Demo interface
 │   ├── src/
-│   │   └── main.ts                       # Demo application
+│   │   └── main.tsx                      # Demo application
 │   └── README.md                         # Demo documentation
 ├── dist/                                 # Compiled JavaScript
 └── CHANGELOG.md                          # Version history
@@ -192,7 +341,24 @@ npm run demo:build
 
 ### Package Dependencies
 
-- `zaraz-ts` (^1.2.0) - TypeScript definitions for Zaraz APIs
+- No required runtime dependencies (peer dependencies only)
+
+## Package Exports
+
+The package provides a clean, generic API for consent integration:
+
+### Main Package (`sentry-consent-integration`)
+
+```typescript
+import {
+  sentryConsentIntegration,
+  SentryConsentIntegrationClass,
+  type ConsentState,
+  type ConsentStateGetters,
+  type SentryConsentIntegrationOptions,
+  logEvent,
+} from 'sentry-consent-integration';
+```
 
 ## Contributing
 
@@ -208,7 +374,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- 🌐 [Live Demo](https://pod666.github.io/sentry-zaraz-consent-integration/)
+- 🌐 [Live Demo](https://pod666.github.io/sentry-consent-integration/)
 - 📚 [Demo Documentation](demo/README.md)
-- 🐛 [Issue Tracker](https://github.com/POD666/sentry-zaraz-consent-integration/issues)
+- 🐛 [Issue Tracker](https://github.com/POD666/sentry-consent-integration/issues)
 - 📝 [Changelog](CHANGELOG.md)

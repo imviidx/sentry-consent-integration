@@ -2,8 +2,8 @@ import ReactDOM from 'react-dom/client';
 import { App } from './components/App';
 import './style.css';
 import * as Sentry from '@sentry/browser';
-import { sentryZarazConsentIntegration } from 'sentry-zaraz-consent-integration';
-
+import { sentryConsentIntegration } from '../../src/index';
+import { zaraz } from 'zaraz-ts';
 import { purposeMapping, initFakeZarazShort } from './fake-zaraz.js';
 
 initFakeZarazShort();
@@ -38,18 +38,26 @@ Sentry.init({
       levels: ['error'],
     }),
     // The consent integration will control when replay is active via sample rates
-    sentryZarazConsentIntegration({
-      purposeMapping,
+    sentryConsentIntegration({
+      consentStateGetters: {
+        functional: () => zaraz.consent.get('YYY') ?? false,
+        analytics: () => zaraz.consent.get('USeX') ?? false,
+        marketing: () => zaraz.consent.get('dqVA') ?? false,
+        preferences: () => zaraz.consent.get('NNN') ?? false,
+      },
+      onConsentChange: (trigger) => {
+        document.addEventListener('zarazConsentChoicesUpdated', trigger);
+        document.addEventListener('zarazConsentAPIReady', trigger);
+        return () => {
+          document.removeEventListener('zarazConsentChoicesUpdated', trigger);
+          document.removeEventListener('zarazConsentAPIReady', trigger);
+        };
+      },
       debug: true,
     }),
   ],
 
   beforeSend(event: any) {
-    console.log('📤 Sentry beforeSend called:', {
-      eventType: event.type,
-      eventId: event.event_id,
-      level: event.level,
-    });
     return event;
   },
 });

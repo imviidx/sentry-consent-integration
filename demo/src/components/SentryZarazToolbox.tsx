@@ -22,7 +22,7 @@ export const SentryZarazToolbox: React.FC<SentryZarazToolboxProps> = ({
   return (
     <div className={`bg-white rounded-lg p-6 shadow-sm ${className}`}>
       <h2 className='text-slate-800 mt-0 flex justify-between items-center'>
-        Zaraz Consent Sentry Interpretation
+        Consent Status & Sentry Mapping
         <button
           onClick={showConsentDialog}
           className='btn primary ml-4 text-sm py-2 px-4'
@@ -33,7 +33,8 @@ export const SentryZarazToolbox: React.FC<SentryZarazToolboxProps> = ({
 
       <div className='border-2 border-slate-200 rounded-lg p-5 my-5 bg-slate-50 relative'>
         <div className='absolute -top-3 left-4 bg-slate-50 px-2 text-xs text-slate-500 font-medium'>
-          Read-only - Use "Show Consent" to change settings
+          Read-only - Use "Show Consent" to change settings (Demo uses Zaraz
+          helpers)
         </div>
 
         {Object.entries(currentConsent).map(([purpose, granted]) => (
@@ -47,16 +48,18 @@ export const SentryZarazToolbox: React.FC<SentryZarazToolboxProps> = ({
             />
             <span className='text-slate-600 text-sm'>
               {purpose === 'functional' && 'Required for core error tracking'}
-              {purpose === 'analytics' && 'Performance monitoring & metrics'}
-              {purpose === 'marketing' && 'Session replay & user behavior'}
-              {purpose === 'preferences' && 'PII collection & personalization'}
+              {purpose === 'analytics' &&
+                'Performance monitoring & breadcrumbs'}
+              {purpose === 'preferences' && 'Session replay & PII collection'}
+              {purpose === 'marketing' && 'User identification & A/B testing'}
             </span>
           </div>
         ))}
       </div>
 
       <div className='status info'>
-        Raw Consent Status: {JSON.stringify(currentConsentCheckboxes, null, 2)}
+        Raw Consent Data (from Zaraz):{' '}
+        {JSON.stringify(currentConsentCheckboxes, null, 2)}
       </div>
     </div>
   );

@@ -1,16 +1,16 @@
 {
-  "name": "sentry-zaraz-consent-integration",
-  "version": "1.2.1",
+  "name": "sentry-consent-integration",
+  "version": "2.0.0",
   "type": "module",
-  "description": "Adjust Sentry configuration according to current Zaraz Consent selection",
-  "main": "dist/SentryZarazConsentIntegration.js",
-  "module": "dist/SentryZarazConsentIntegration.js",
-  "types": "dist/SentryZarazConsentIntegration.d.ts",
+  "description": "Adjust Sentry configuration according to current consent selection",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/SentryZarazConsentIntegration.js",
-      "require": "./dist/SentryZarazConsentIntegration.js",
-      "types": "./dist/SentryZarazConsentIntegration.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
     }
   },
   "files": [
@@ -32,25 +32,23 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/POD666/sentry-zaraz-consent-integration.git"
+    "url": "git+https://github.com/POD666/sentry-consent-integration.git"
   },
   "keywords": [
     "sentry",
-    "zaraz",
     "consent",
-    "gdpr"
+    "gdpr",
+    "privacy"
   ],
   "author": "v.v.danyliuk@gmail.com",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/POD666/sentry-zaraz-consent-integration/issues"
+    "url": "https://github.com/POD666/sentry-consent-integration/issues"
   },
-  "homepage": "https://github.com/POD666/sentry-zaraz-consent-integration#readme",
+  "homepage": "https://github.com/POD666/sentry-consent-integration#readme",
   "dependencies": {
     "@sentry/react": "^8.29.0",
-    "@sentry/types": "^8.29.0",
-    "sentry": "^0.1.2",
-    "zaraz-ts": "^1.2.0"
+    "@sentry/types": "^8.29.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

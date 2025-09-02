@@ -51,7 +51,7 @@ export const LogsDisplay: React.FC<LogsDisplayProps> = ({ className = '' }) => {
         // Fall through to manual approach
       }
 
-      console.warn('[LogsDisplay] addConsoleInstrumentationHandler failed');
+      // addConsoleInstrumentationHandler failed, using fallback
     };
 
     setupConsoleInstrumentation();

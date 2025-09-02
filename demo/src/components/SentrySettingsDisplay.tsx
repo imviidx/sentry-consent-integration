@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import * as Sentry from '@sentry/browser';
+import {
+  SENTRY_CONSENT_CONFIG_KEYS,
+  SENTRY_CONFIG_DESCRIPTIONS,
+  CONSENT_RESTRICTED_CONFIG_KEYS,
+  type SentryConsentConfigKey,
+} from 'sentry-consent-integration';
 
 interface SentrySettingsDisplayProps {
   className?: string;
@@ -26,149 +32,71 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
 }) => {
   const [sentrySettings, setSentrySettings] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [originalUserConfig, setOriginalUserConfig] = useState<any>(null);
-  const [originalUserIntegrations, setOriginalUserIntegrations] =
-    useState<any>(null);
+  const [asyncData, setAsyncData] = useState<{
+    userCodedConfig: any;
+    userCodedIntegrations: any;
+    highlightedCurrentConfig: string;
+    highlightedUserCodedConfig: string;
+    highlightedCurrentIntegrations: string;
+    highlightedUserCodedIntegrations: string;
+  }>({
+    userCodedConfig: {},
+    userCodedIntegrations: {},
+    highlightedCurrentConfig: '',
+    highlightedUserCodedConfig: '',
+    highlightedCurrentIntegrations: '',
+    highlightedUserCodedIntegrations: '',
+  });
 
-  // Get actual Sentry defaults by creating a shadow client
-  const getSentryDefaults = () => {
-    try {
-      // Get default integrations from Sentry
-      const defaultIntegrations = (Sentry as any).getDefaultIntegrations({});
+  // Get actual Sentry defaults using available Sentry functions
+  const getSentryDefaults = async () => {
+    // Get default integrations from Sentry - this is available
+    const defaultIntegrations = (Sentry as any).getDefaultIntegrations({});
 
-      // Create a minimal shadow client to extract default values
-      const shadowOptions = {
-        dsn: 'https://fake@fake.ingest.sentry.io/fake', // Fake DSN to avoid network calls
-        transport: () => ({
-          send: () => Promise.resolve({}),
-          flush: () => Promise.resolve(true),
-        }),
-        beforeSend: () => null, // Block all events
-      };
-
-      // Apply Sentry's internal default options processing
-      let processedDefaults = shadowOptions;
-      try {
-        // Try to access Sentry's internal default option processing
-        if ((Sentry as any).BrowserClient) {
-          const tempClient = new (Sentry as any).BrowserClient(shadowOptions);
-          const tempOptions = tempClient.getOptions();
-          processedDefaults = tempOptions;
-        }
-      } catch (e) {
-        // Fallback to known defaults if internal processing fails
-        console.warn(
-          'Could not access Sentry default processing, using fallback defaults'
-        );
-      }
-
-      return {
-        config: {
-          // Core configuration defaults (from Sentry documentation)
-          sampleRate: 1.0,
-          tracesSampleRate: 0.0, // Default is 0 (no tracing)
-          sendDefaultPii: false, // Default is false
-          maxBreadcrumbs: 100,
-          attachStacktrace: false, // Default is false
-          autoSessionTracking: true,
-          replaysSessionSampleRate: 0.0, // Default is 0
-          replaysOnErrorSampleRate: 0.0, // Default is 0
-          profilesSampleRate: 0.0, // Default is 0
-          ...processedDefaults,
-        },
-        integrations: defaultIntegrations.reduce(
-          (acc: any, integration: any) => {
-            acc[integration.name] = {
-              enabled: true,
-              isDefault: true,
-            };
-            return acc;
-          },
-          {}
-        ),
-      };
-    } catch (err) {
-      console.error('Error getting Sentry defaults:', err);
-      return {
-        config: {
-          // Fallback defaults if extraction fails
-          sampleRate: 1.0,
-          tracesSampleRate: 0.0,
-          sendDefaultPii: false,
-          maxBreadcrumbs: 100,
-          attachStacktrace: false,
-          autoSessionTracking: true,
-          replaysSessionSampleRate: 0.0,
-          replaysOnErrorSampleRate: 0.0,
-          profilesSampleRate: 0.0,
-        },
-        integrations: {
-          InboundFilters: {
-            name: 'InboundFilters',
-            enabled: true,
-            isDefault: true,
-          },
-          FunctionToString: {
-            name: 'FunctionToString',
-            enabled: true,
-            isDefault: true,
-          },
-          BrowserApiErrors: {
-            name: 'BrowserApiErrors',
-            enabled: true,
-            isDefault: true,
-          },
-          Breadcrumbs: { name: 'Breadcrumbs', enabled: true, isDefault: true },
-          GlobalHandlers: {
-            name: 'GlobalHandlers',
-            enabled: true,
-            isDefault: true,
-          },
-          LinkedErrors: {
-            name: 'LinkedErrors',
-            enabled: true,
-            isDefault: true,
-          },
-          Dedupe: { name: 'Dedupe', enabled: true, isDefault: true },
-          HttpContext: { name: 'HttpContext', enabled: true, isDefault: true },
-          BrowserSession: {
-            name: 'BrowserSession',
-            enabled: true,
-            isDefault: true,
-          },
-        },
-      };
+    // Use applyDefaultOptions - this must be available
+    if (typeof (Sentry as any).applyDefaultOptions !== 'function') {
+      throw new Error('applyDefaultOptions is not available in Sentry');
     }
+
+    const appliedDefaults = (Sentry as any).applyDefaultOptions({});
+    const defaultConfig = {
+      attachStacktrace: appliedDefaults.attachStacktrace ?? false,
+      autoSessionTracking: appliedDefaults.autoSessionTracking ?? true,
+      maxBreadcrumbs: appliedDefaults.maxBreadcrumbs ?? '100',
+      profilesSampleRate: appliedDefaults.profilesSampleRate ?? 0.0,
+      replaysOnErrorSampleRate: appliedDefaults.replaysOnErrorSampleRate ?? 0.0,
+      replaysSessionSampleRate: appliedDefaults.replaysSessionSampleRate ?? 0.0,
+      sampleRate: appliedDefaults.sampleRate ?? 1.0,
+      sendClientReports: appliedDefaults.sendClientReports ?? true,
+      sendDefaultPii: appliedDefaults.sendDefaultPii ?? false,
+      tracesSampleRate: appliedDefaults.tracesSampleRate ?? 0.0,
+    };
+
+    return {
+      config: defaultConfig,
+      integrations: defaultIntegrations.reduce((acc: any, integration: any) => {
+        acc[integration.name] = { enabled: true, isDefault: true };
+        return acc;
+      }, {}),
+    };
   };
 
-  const getSentrySettings = () => {
+  const getSentrySettings = async () => {
     try {
-      const client = Sentry.getCurrentHub().getClient();
+      const client = Sentry.getClient();
       if (!client) {
         return { error: 'Sentry client not available' };
       }
 
       const options = client.getOptions();
 
-      // Get actual Sentry defaults
-      const sentryDefaults = getSentryDefaults();
+      // Get actual Sentry defaults (now async)
+      const sentryDefaults = await getSentryDefaults();
 
       // Build configuration comparison
-      const configKeys = [
-        'sampleRate',
-        'tracesSampleRate',
-        'sendDefaultPii',
-        'maxBreadcrumbs',
-        'attachStacktrace',
-        'autoSessionTracking',
-        'replaysSessionSampleRate',
-        'replaysOnErrorSampleRate',
-        'profilesSampleRate',
-      ];
-
       const configItems: Record<string, ConfigItem> = {};
 
-      configKeys.forEach((key) => {
+      SENTRY_CONSENT_CONFIG_KEYS.forEach((key) => {
         const currentValue = (options as any)[key];
         const defaultValue = (sentryDefaults.config as any)[key];
         const isOverridden = currentValue !== defaultValue;
@@ -230,18 +158,10 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
   };
 
   const getConfigDescription = (key: string): string => {
-    const descriptions: Record<string, string> = {
-      sampleRate: 'Percentage of events to send to Sentry',
-      tracesSampleRate: 'Percentage of transactions to trace',
-      sendDefaultPii: 'Send personally identifiable information',
-      maxBreadcrumbs: 'Maximum number of breadcrumbs to store',
-      attachStacktrace: 'Attach stack traces to all events',
-      autoSessionTracking: 'Automatically track user sessions',
-      replaysSessionSampleRate: 'Percentage of sessions to record',
-      replaysOnErrorSampleRate: 'Percentage of error sessions to record',
-      profilesSampleRate: 'Percentage of transactions to profile',
-    };
-    return descriptions[key] || 'Sentry configuration option';
+    return (
+      SENTRY_CONFIG_DESCRIPTIONS[key as SentryConsentConfigKey] ||
+      'Sentry configuration option'
+    );
   };
 
   const determineForbiddenState = (
@@ -252,16 +172,13 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     // Logic to determine if a setting is forbidden based on consent restrictions
     // This simulates the consent integration's behavior
 
-    // These settings are typically disabled when consent is not granted
-    const consentRestrictedSettings = [
-      'sendDefaultPii',
-      'tracesSampleRate',
-      'replaysSessionSampleRate',
-      'replaysOnErrorSampleRate',
-      'profilesSampleRate',
+    // Check if this key is consent-restricted using the exported constants
+    const allRestrictedKeys = [
+      ...CONSENT_RESTRICTED_CONFIG_KEYS.analytics,
+      ...CONSENT_RESTRICTED_CONFIG_KEYS.preferences,
     ];
 
-    if (consentRestrictedSettings.includes(key)) {
+    if (allRestrictedKeys.includes(key as any)) {
       // If current value is more restrictive than default, it might be due to consent restrictions
       if (
         typeof currentValue === 'number' &&
@@ -280,37 +197,48 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     return false;
   };
 
-  const captureOriginalUserConfiguration = () => {
+  const getOriginalUserConfiguration = async () => {
     try {
-      const client = Sentry.getCurrentHub().getClient();
-      if (!client) return;
+      const client = Sentry.getClient();
+      if (!client) {
+        return { config: {}, integrations: {} };
+      }
 
       const options = client.getOptions();
-      const sentryDefaults = getSentryDefaults();
+      if (!options.integrations) {
+        return { config: {}, integrations: {} };
+      }
 
-      // Capture original user configuration
-      const configKeys = [
-        'sampleRate',
-        'tracesSampleRate',
-        'sendDefaultPii',
-        'maxBreadcrumbs',
-        'attachStacktrace',
-        'autoSessionTracking',
-        'replaysSessionSampleRate',
-        'replaysOnErrorSampleRate',
-        'profilesSampleRate',
+      // Find the consent integration - try multiple possible names
+      let consentIntegration: any = null;
+      const possibleNames = [
+        'SentryConsentIntegration',
+        'sentryConsentIntegration',
       ];
 
-      const userConfig: any = {};
-      configKeys.forEach((key) => {
-        const optionValue = (options as any)[key];
-        if (optionValue !== undefined) {
-          userConfig[key] = optionValue;
+      for (const integration of options.integrations) {
+        if (possibleNames.includes(integration.name)) {
+          consentIntegration = integration;
+          break;
         }
-      });
+      }
 
-      // Capture original user integrations
+      if (!consentIntegration) {
+        return { config: {}, integrations: {} };
+      }
+
+      // Check if the method exists
+      if (!consentIntegration.getOriginalSentryConfig) {
+        return { config: {}, integrations: {} };
+      }
+
+      // Get the original configuration from the consent integration
+      const originalConfig = consentIntegration.getOriginalSentryConfig();
+
+      // Get the original integrations that were passed by the user
+      const sentryDefaults = await getSentryDefaults();
       const userIntegrations: any = {};
+
       if (options.integrations && Array.isArray(options.integrations)) {
         options.integrations.forEach((integration: any) => {
           const name = integration?.name || 'UnknownIntegration';
@@ -321,18 +249,77 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
         });
       }
 
-      setOriginalUserConfig(userConfig);
-      setOriginalUserIntegrations(userIntegrations);
+      return {
+        config: originalConfig,
+        integrations: userIntegrations,
+      };
     } catch (err) {
-      console.error('Error capturing original user configuration:', err);
+      console.error(
+        'Error getting original user configuration from consent integration:',
+        err
+      );
+      return { config: {}, integrations: {} };
     }
   };
 
-  const refreshSettings = () => {
+  const refreshSettings = async () => {
     try {
       setError(null);
-      const settings = getSentrySettings();
+      const settings = await getSentrySettings();
       setSentrySettings(settings);
+
+      // Calculate async data for rendering
+      if (settings && !settings.error) {
+        const userCodedConfig = await buildUserCodedConfigObject();
+        const userCodedIntegrations = await buildUserCodedIntegrationsObject();
+
+        const currentConfigJson = JSON.stringify(
+          buildCurrentConfigObject(settings.configItems || {}),
+          null,
+          2
+        );
+        const userCodedConfigJson = JSON.stringify(userCodedConfig, null, 2);
+        const currentIntegrationsJson = JSON.stringify(
+          buildCurrentIntegrationsObject(settings.activeIntegrations || {}),
+          null,
+          2
+        );
+        const userCodedIntegrationsJson = JSON.stringify(
+          userCodedIntegrations,
+          null,
+          2
+        );
+
+        // Generate highlighted versions
+        const highlightedCurrentConfig = await highlightCurrentDifferences(
+          currentConfigJson,
+          settings.configItems
+        );
+        const highlightedUserCodedConfig = await highlightUserCodedDifferences(
+          userCodedConfigJson,
+          settings.sentryDefaults
+        );
+        const highlightedCurrentIntegrations =
+          await highlightCurrentDifferences(
+            currentIntegrationsJson,
+            undefined,
+            settings.activeIntegrations
+          );
+        const highlightedUserCodedIntegrations =
+          await highlightUserCodedDifferences(
+            userCodedIntegrationsJson,
+            settings.sentryDefaults
+          );
+
+        setAsyncData({
+          userCodedConfig,
+          userCodedIntegrations,
+          highlightedCurrentConfig,
+          highlightedUserCodedConfig,
+          highlightedCurrentIntegrations,
+          highlightedUserCodedIntegrations,
+        });
+      }
     } catch (err) {
       setError(`Error getting Sentry settings: ${err}`);
       setSentrySettings(null);
@@ -340,11 +327,6 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
   };
 
   useEffect(() => {
-    // Capture original user configuration first (only once)
-    if (!originalUserConfig || !originalUserIntegrations) {
-      captureOriginalUserConfiguration();
-    }
-
     // Initial load
     refreshSettings();
 
@@ -352,33 +334,22 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     const interval = setInterval(refreshSettings, 2000);
 
     return () => clearInterval(interval);
-  }, [originalUserConfig, originalUserIntegrations]);
+  }, []);
 
   const buildDefaultConfigObject = (sentryDefaults: any) => {
     if (!sentryDefaults?.config) return {};
 
-    const configKeys = [
-      'sampleRate',
-      'tracesSampleRate',
-      'sendDefaultPii',
-      'maxBreadcrumbs',
-      'attachStacktrace',
-      'autoSessionTracking',
-      'replaysSessionSampleRate',
-      'replaysOnErrorSampleRate',
-      'profilesSampleRate',
-    ];
-
     const result: any = {};
-    configKeys.forEach((key) => {
+    SENTRY_CONSENT_CONFIG_KEYS.forEach((key) => {
       result[key] = (sentryDefaults.config as any)[key];
     });
     return result;
   };
 
-  const buildUserCodedConfigObject = () => {
-    // Return the captured original user configuration
-    return originalUserConfig || {};
+  const buildUserCodedConfigObject = async () => {
+    // Get the original user configuration from consent integration
+    const originalConfig = await getOriginalUserConfiguration();
+    return originalConfig.config || {};
   };
 
   const buildCurrentConfigObject = (
@@ -391,9 +362,10 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     return result;
   };
 
-  const buildUserCodedIntegrationsObject = () => {
-    // Return the captured original user integrations
-    return originalUserIntegrations || {};
+  const buildUserCodedIntegrationsObject = async () => {
+    // Get the original user integrations from consent integration
+    const originalConfig = await getOriginalUserConfiguration();
+    return originalConfig.integrations || {};
   };
 
   const buildDefaultIntegrationsObject = (sentryDefaults: any) => {
@@ -414,7 +386,7 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     return result;
   };
 
-  const highlightDifferences = (
+  const highlightCurrentDifferences = async (
     jsonString: string,
     configItems?: Record<string, ConfigItem>,
     activeIntegrations?: Record<string, IntegrationItem>
@@ -423,61 +395,13 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
 
     let highlightedJson = jsonString;
 
-    // Highlight overridden config values
-    if (configItems) {
-      Object.entries(configItems).forEach(([key, item]) => {
-        if (item.isOverridden || item.isForbidden) {
-          const valueStr = JSON.stringify(item.currentValue);
-          // More flexible regex that matches the key-value pair in JSON
-          const regex = new RegExp(
-            `("${key}")(:)(\\s*)(${valueStr.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )})`,
-            'g'
-          );
-          const bgColor = item.isForbidden ? 'bg-amber-200' : 'bg-green-200';
-          const textColor = item.isForbidden
-            ? 'text-amber-800'
-            : 'text-green-800';
-          highlightedJson = highlightedJson.replace(
-            regex,
-            `$1$2$3<span class="${bgColor} ${textColor} px-1 rounded font-semibold">$4</span>`
-          );
-        }
-      });
-    }
-
-    // Also highlight integration differences
-    if (activeIntegrations) {
-      Object.entries(activeIntegrations).forEach(([key, item]) => {
-        if (!item.isDefault) {
-          // Highlight custom integrations
-          const regex = new RegExp(`("${key}")(:)`, 'g');
-          highlightedJson = highlightedJson.replace(
-            regex,
-            `<span class="bg-blue-200 text-blue-800 px-1 rounded font-semibold">$1</span>$2`
-          );
-        }
-      });
-    }
-
-    return highlightedJson;
-  };
-
-  const highlightCurrentDifferences = (
-    jsonString: string,
-    configItems?: Record<string, ConfigItem>,
-    activeIntegrations?: Record<string, IntegrationItem>
-  ) => {
-    if (!configItems && !activeIntegrations) return jsonString;
-
-    let highlightedJson = jsonString;
+    // Get original user config from consent integration
+    const originalUserConfig = await getOriginalUserConfiguration();
 
     // Highlight config values based on their relationship to user-coded and default values
-    if (configItems && originalUserConfig) {
+    if (configItems && originalUserConfig.config) {
       Object.entries(configItems).forEach(([key, item]) => {
-        const userCodedValue = originalUserConfig[key];
+        const userCodedValue = originalUserConfig.config[key];
         const currentValue = item.currentValue;
         const defaultValue = item.defaultValue;
 
@@ -514,26 +438,29 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
 
         if (shouldHighlight) {
           const valueStr = JSON.stringify(currentValue);
-          // More flexible regex that matches the key-value pair in JSON
-          const regex = new RegExp(
-            `("${key}")(:)(\\s*)(${valueStr.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )})`,
-            'g'
-          );
-          highlightedJson = highlightedJson.replace(
-            regex,
-            `$1$2$3<span class="${bgColor} ${textColor} px-1 rounded font-semibold">$4</span>`
-          );
+          // Check if valueStr is a valid string before using replace
+          if (valueStr && typeof valueStr === 'string') {
+            // More flexible regex that matches the key-value pair in JSON
+            const regex = new RegExp(
+              `("${key}")(:)(\\s*)(${valueStr.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                '\\$&'
+              )})`,
+              'g'
+            );
+            highlightedJson = highlightedJson.replace(
+              regex,
+              `$1$2$3<span class="${bgColor} ${textColor} px-1 rounded font-semibold">$4</span>`
+            );
+          }
         }
       });
     }
 
     // Highlight integration differences from user-coded integrations
-    if (activeIntegrations && originalUserIntegrations) {
+    if (activeIntegrations && originalUserConfig.integrations) {
       Object.entries(activeIntegrations).forEach(([key, item]) => {
-        const userHadIntegration = originalUserIntegrations[key];
+        const userHadIntegration = originalUserConfig.integrations[key];
         const isModifiedFromUserCode =
           userHadIntegration?.enabled !== item.enabled;
 
@@ -555,42 +482,52 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
     return highlightedJson;
   };
 
-  const highlightUserCodedDifferences = (
+  const highlightUserCodedDifferences = async (
     jsonString: string,
     sentryDefaults?: any
   ) => {
-    if (!originalUserConfig && !originalUserIntegrations && !sentryDefaults)
+    // Get original user config from consent integration
+    const originalUserData = await getOriginalUserConfiguration();
+
+    if (
+      !originalUserData.config &&
+      !originalUserData.integrations &&
+      !sentryDefaults
+    )
       return jsonString;
 
     let highlightedJson = jsonString;
 
     // Highlight config values that differ from default (user overrides)
-    if (originalUserConfig && sentryDefaults) {
-      Object.entries(originalUserConfig).forEach(([key, userValue]) => {
+    if (originalUserData.config && sentryDefaults) {
+      Object.entries(originalUserData.config).forEach(([key, userValue]) => {
         const defaultValue = (sentryDefaults.config as any)[key];
         const isUserOverride = userValue !== defaultValue;
 
         if (isUserOverride) {
           const valueStr = JSON.stringify(userValue);
-          // More flexible regex that matches the key-value pair in JSON
-          const regex = new RegExp(
-            `("${key}")(:)(\\s*)(${valueStr.replace(
-              /[.*+?^${}()|[\]\\]/g,
-              '\\$&'
-            )})`,
-            'g'
-          );
-          highlightedJson = highlightedJson.replace(
-            regex,
-            `$1$2$3<span class="bg-green-200 text-green-800 px-1 rounded font-semibold">$4</span>`
-          );
+          // Check if valueStr is a valid string before using replace
+          if (valueStr && typeof valueStr === 'string') {
+            // More flexible regex that matches the key-value pair in JSON
+            const regex = new RegExp(
+              `("${key}")(:)(\\s*)(${valueStr.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                '\\$&'
+              )})`,
+              'g'
+            );
+            highlightedJson = highlightedJson.replace(
+              regex,
+              `$1$2$3<span class="bg-green-200 text-green-800 px-1 rounded font-semibold">$4</span>`
+            );
+          }
         }
       });
     }
 
     // Highlight custom integrations (non-default)
-    if (originalUserIntegrations) {
-      Object.entries(originalUserIntegrations).forEach(
+    if (originalUserData.integrations) {
+      Object.entries(originalUserData.integrations).forEach(
         ([key, integration]: [string, any]) => {
           if (!integration.isDefault) {
             // Highlight custom integrations
@@ -695,14 +632,7 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
                     <pre className='bg-slate-900 text-slate-300 p-4 rounded-b text-xs'>
                       <code
                         dangerouslySetInnerHTML={{
-                          __html: highlightUserCodedDifferences(
-                            JSON.stringify(
-                              buildUserCodedConfigObject(),
-                              null,
-                              2
-                            ),
-                            sentrySettings.sentryDefaults
-                          ),
+                          __html: asyncData.highlightedUserCodedConfig,
                         }}
                       />
                     </pre>
@@ -716,16 +646,7 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
                     <pre className='bg-slate-900 text-slate-300 p-4 rounded-b text-xs'>
                       <code
                         dangerouslySetInnerHTML={{
-                          __html: highlightCurrentDifferences(
-                            JSON.stringify(
-                              buildCurrentConfigObject(
-                                sentrySettings.configItems || {}
-                              ),
-                              null,
-                              2
-                            ),
-                            sentrySettings.configItems
-                          ),
+                          __html: asyncData.highlightedCurrentConfig,
                         }}
                       />
                     </pre>
@@ -765,14 +686,7 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
                     <pre className='bg-slate-900 text-slate-300 p-4 rounded-b text-xs'>
                       <code
                         dangerouslySetInnerHTML={{
-                          __html: highlightUserCodedDifferences(
-                            JSON.stringify(
-                              buildUserCodedIntegrationsObject(),
-                              null,
-                              2
-                            ),
-                            sentrySettings.sentryDefaults
-                          ),
+                          __html: asyncData.highlightedUserCodedIntegrations,
                         }}
                       />
                     </pre>
@@ -786,17 +700,7 @@ export const SentrySettingsDisplay: React.FC<SentrySettingsDisplayProps> = ({
                     <pre className='bg-slate-900 text-slate-300 p-4 rounded-b text-xs'>
                       <code
                         dangerouslySetInnerHTML={{
-                          __html: highlightCurrentDifferences(
-                            JSON.stringify(
-                              buildCurrentIntegrationsObject(
-                                sentrySettings.activeIntegrations || {}
-                              ),
-                              null,
-                              2
-                            ),
-                            undefined,
-                            sentrySettings.activeIntegrations
-                          ),
+                          __html: asyncData.highlightedCurrentIntegrations,
                         }}
                       />
                     </pre>

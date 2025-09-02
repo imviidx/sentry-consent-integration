@@ -1,0 +1,74 @@
+diff --git a/node_modules/@sentry/browser/build/npm/cjs/index.js b/node_modules/@sentry/browser/build/npm/cjs/index.js
+index 900e0c9..7073824 100644
+--- a/node_modules/@sentry/browser/build/npm/cjs/index.js
++++ b/node_modules/@sentry/browser/build/npm/cjs/index.js
+@@ -118,6 +118,7 @@ exports.eventFromException = eventbuilder.eventFromException;
+ exports.eventFromMessage = eventbuilder.eventFromMessage;
+ exports.exceptionFromError = eventbuilder.exceptionFromError;
+ exports.createUserFeedbackEnvelope = userfeedback.createUserFeedbackEnvelope;
++exports.applyDefaultOptions = sdk.applyDefaultOptions;
+ exports.captureUserFeedback = sdk.captureUserFeedback;
+ exports.forceLoad = sdk.forceLoad;
+ exports.getDefaultIntegrations = sdk.getDefaultIntegrations;
+diff --git a/node_modules/@sentry/browser/build/npm/cjs/sdk.js b/node_modules/@sentry/browser/build/npm/cjs/sdk.js
+index 13e7a48..756ec91 100644
+--- a/node_modules/@sentry/browser/build/npm/cjs/sdk.js
++++ b/node_modules/@sentry/browser/build/npm/cjs/sdk.js
+@@ -268,6 +268,7 @@ function captureUserFeedback(feedback) {
+   }
+ }
+ 
++exports.applyDefaultOptions = applyDefaultOptions;
+ exports.captureUserFeedback = captureUserFeedback;
+ exports.forceLoad = forceLoad;
+ exports.getDefaultIntegrations = getDefaultIntegrations;
+diff --git a/node_modules/@sentry/browser/build/npm/esm/index.js b/node_modules/@sentry/browser/build/npm/esm/index.js
+index f3c8ba9..39258b0 100644
+--- a/node_modules/@sentry/browser/build/npm/esm/index.js
++++ b/node_modules/@sentry/browser/build/npm/esm/index.js
+@@ -5,7 +5,7 @@ export { makeFetchTransport } from './transports/fetch.js';
+ export { chromeStackLineParser, defaultStackLineParsers, defaultStackParser, geckoStackLineParser, opera10StackLineParser, opera11StackLineParser, winjsStackLineParser } from './stack-parsers.js';
+ export { eventFromException, eventFromMessage, exceptionFromError } from './eventbuilder.js';
+ export { createUserFeedbackEnvelope } from './userfeedback.js';
+-export { captureUserFeedback, forceLoad, getDefaultIntegrations, init, onLoad, showReportDialog } from './sdk.js';
++export { applyDefaultOptions, captureUserFeedback, forceLoad, getDefaultIntegrations, init, onLoad, showReportDialog } from './sdk.js';
+ export { breadcrumbsIntegration } from './integrations/breadcrumbs.js';
+ export { globalHandlersIntegration } from './integrations/globalhandlers.js';
+ export { httpContextIntegration } from './integrations/httpcontext.js';
+diff --git a/node_modules/@sentry/browser/build/npm/esm/sdk.js b/node_modules/@sentry/browser/build/npm/esm/sdk.js
+index e44dc96..0991b7e 100644
+--- a/node_modules/@sentry/browser/build/npm/esm/sdk.js
++++ b/node_modules/@sentry/browser/build/npm/esm/sdk.js
+@@ -266,5 +266,5 @@ function captureUserFeedback(feedback) {
+   }
+ }
+ 
+-export { captureUserFeedback, forceLoad, getDefaultIntegrations, init, onLoad, showReportDialog };
++export { applyDefaultOptions, captureUserFeedback, forceLoad, getDefaultIntegrations, init, onLoad, showReportDialog };
+ //# sourceMappingURL=sdk.js.map
+diff --git a/node_modules/@sentry/browser/build/npm/types/exports.d.ts b/node_modules/@sentry/browser/build/npm/types/exports.d.ts
+index a479e5b..3151d20 100644
+--- a/node_modules/@sentry/browser/build/npm/types/exports.d.ts
++++ b/node_modules/@sentry/browser/build/npm/types/exports.d.ts
+@@ -9,7 +9,7 @@ export { makeFetchTransport } from './transports/fetch';
+ export { defaultStackParser, defaultStackLineParsers, chromeStackLineParser, geckoStackLineParser, opera10StackLineParser, opera11StackLineParser, winjsStackLineParser, } from './stack-parsers';
+ export { eventFromException, eventFromMessage, exceptionFromError } from './eventbuilder';
+ export { createUserFeedbackEnvelope } from './userfeedback';
+-export { getDefaultIntegrations, forceLoad, init, onLoad, showReportDialog, captureUserFeedback, } from './sdk';
++export { applyDefaultOptions, getDefaultIntegrations, forceLoad, init, onLoad, showReportDialog, captureUserFeedback, } from './sdk';
+ export { breadcrumbsIntegration } from './integrations/breadcrumbs';
+ export { globalHandlersIntegration } from './integrations/globalhandlers';
+ export { httpContextIntegration } from './integrations/httpcontext';
+diff --git a/node_modules/@sentry/browser/build/npm/types/sdk.d.ts b/node_modules/@sentry/browser/build/npm/types/sdk.d.ts
+index 0a56051..778a59f 100644
+--- a/node_modules/@sentry/browser/build/npm/types/sdk.d.ts
++++ b/node_modules/@sentry/browser/build/npm/types/sdk.d.ts
+@@ -2,6 +2,8 @@ import type { Client, DsnLike, Integration, Options, UserFeedback } from '@sentr
+ import type { BrowserOptions } from './client';
+ /** Get the default integrations for the browser SDK. */
+ export declare function getDefaultIntegrations(options: Options): Integration[];
++/** Apply default options to the SDK. */
++export declare function applyDefaultOptions(options: BrowserOptions): BrowserOptions;
+ /**
+  * The Sentry Browser SDK Client.
+  *
