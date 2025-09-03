@@ -1,6 +1,6 @@
 {
   "name": "@imviidx/sentry-consent-integration",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Adjust Sentry configuration according to current consent selection",
   "main": "dist/index.js",
