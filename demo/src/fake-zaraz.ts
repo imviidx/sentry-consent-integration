@@ -1,4 +1,4 @@
-import { initFakeZaraz } from 'fake-cloudflare-zaraz-consent';
+import { initFakeZaraz } from '@imviidx/fake-cloudflare-zaraz-consent';
 
 // Fake purposes, aka CF Consent
 const purposes = [

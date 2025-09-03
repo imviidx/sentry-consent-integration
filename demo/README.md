@@ -23,13 +23,13 @@ This demo is built with:
   - `sentry-consent-integration`: The main generic integration package
   - `sentry-consent-integration/zarazHelpers`: Zaraz-specific helper functions
   - `@sentry/browser`: Sentry SDK for browsers
-  - `fake-cloudflare-zaraz-consent`: Development simulation of Zaraz consent API
+  - `@imviidx/fake-cloudflare-zaraz-consent`: Development simulation of Zaraz consent API
 
 ## Environment Setup
 
 ### Development Mode (Default)
 
-- Uses `fake-cloudflare-zaraz-consent` package to simulate Zaraz consent API
+- Uses `@imviidx/fake-cloudflare-zaraz-consent` package to simulate Zaraz consent API
 - Demonstrates generic integration working with Zaraz via helper functions
 - Fake Sentry DSN for testing without sending real data
 - Debug logging enabled
