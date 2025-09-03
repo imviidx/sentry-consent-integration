@@ -1,48 +1,11 @@
 # Sentry Consent Integration
 
-[![npm version](https://badge.fury.io/js/sentry-consent-integration.svg)](https://badge.fury.io/js/sentry-consent-integration)
+[![npm version](https://badge.fury.io/js/@imviidx%2Fsentry-consent-integration.svg)](https://badge.fury.io/js/@imviidx%2Fsentry-consent-integration)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 A TypeScript integration that dynamically adjusts Sentry configuration based on user consent preferences, ensuring GDPR and privacy compliance while maintaining optimal error tracking and performance monitoring.
 
 **🌐 [Live Demo](https://imviidx.github.io/sentry-consent-integration/)**
-
-## What's New in 2.0.0
-
-🚨 **Major Breaking Changes**: This release transforms the package from Zaraz-specific to a **generic consent integration** that works with any consent management platform.
-
-### Key Changes
-
-- **Package Renamed**: `sentry-zaraz-consent-integration` → `sentry-consent-integration`
-- **Generic API**: Now works with any consent platform through callback functions
-- **Platform Agnostic**: No longer tied to Cloudflare Zaraz or any specific platform
-- **Getter-Based Architecture**: Uses individual getter functions for better control
-- **Cleaner Dependencies**: Removed all platform-specific dependencies, only peer dependencies remain
-
-### Migration Path
-
-The new generic API requires you to implement your own consent getters and change listeners for your specific consent management platform:
-
-```typescript
-// Before (v1.x - Zaraz-specific)
-import { sentryZarazConsentIntegration } from 'sentry-zaraz-consent-integration';
-
-// After (v2.0 - Generic, works with any platform)
-import { sentryConsentIntegration } from 'sentry-consent-integration';
-
-sentryConsentIntegration({
-  consentStateGetters: {
-    functional: () => yourConsentPlatform.hasConsent('functional'),
-    analytics: () => yourConsentPlatform.hasConsent('analytics'),
-    marketing: () => yourConsentPlatform.hasConsent('marketing'),
-    preferences: () => yourConsentPlatform.hasConsent('preferences'),
-  },
-  onConsentChange: (trigger) => {
-    const cleanup = yourConsentPlatform.onChange(() => trigger());
-    return cleanup;
-  },
-});
-```
 
 ## Features
 
@@ -61,8 +24,6 @@ sentryConsentIntegration({
 ```bash
 npm install sentry-consent-integration
 ```
-
-**Note**: This package requires a Sentry browser SDK (`@sentry/browser`, `@sentry/react`, `@sentry/vue`, etc.) and `@sentry/types` as peer dependencies in your project.
 
 ### Basic Usage
 
@@ -307,57 +268,6 @@ npm run build:watch
 
 # Build demo project
 npm run demo:build
-```
-
-### Project Structure
-
-```
-├── src/
-│   ├── index.ts                          # Main exports
-│   ├── SentryConsentIntegration.ts       # Generic consent integration
-│   └── eventLogger.ts                    # Logging utilities
-├── demo/
-│   ├── index.html                        # Demo interface
-│   ├── src/
-│   │   └── main.tsx                      # Demo application
-│   └── README.md                         # Demo documentation
-├── dist/                                 # Compiled JavaScript
-└── CHANGELOG.md                          # Version history
-```
-
-## Browser Compatibility
-
-- ES2020+ support required
-- Modern browsers (Chrome 80+, Firefox 74+, Safari 13.1+, Edge 80+)
-- ES Modules support
-- Fetch API support
-
-## Dependencies
-
-### Required Peer Dependencies
-
-- A Sentry browser SDK: `@sentry/browser`, `@sentry/react`, `@sentry/vue`, `@sentry/angular`, etc. (^8.29.0 or compatible)
-- `@sentry/types` (^8.29.0)
-
-### Package Dependencies
-
-- No required runtime dependencies (peer dependencies only)
-
-## Package Exports
-
-The package provides a clean, generic API for consent integration:
-
-### Main Package (`sentry-consent-integration`)
-
-```typescript
-import {
-  sentryConsentIntegration,
-  SentryConsentIntegrationClass,
-  type ConsentState,
-  type ConsentStateGetters,
-  type SentryConsentIntegrationOptions,
-  logEvent,
-} from 'sentry-consent-integration';
 ```
 
 ## Contributing
