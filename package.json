@@ -1,6 +1,6 @@
 {
-  "name": "sentry-consent-integration",
-  "version": "2.0.0",
+  "name": "@imviidx/sentry-consent-integration",
+  "version": "0.1.0",
   "type": "module",
   "description": "Adjust Sentry configuration according to current consent selection",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/POD666/sentry-consent-integration.git"
+    "url": "git+https://github.com/imviidx/sentry-consent-integration.git"
   },
   "keywords": [
     "sentry",
@@ -43,11 +43,12 @@
   "author": "v.v.danyliuk@gmail.com",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/POD666/sentry-consent-integration/issues"
+    "url": "https://github.com/imviidx/sentry-consent-integration/issues"
   },
-  "homepage": "https://github.com/POD666/sentry-consent-integration#readme",
+  "homepage": "https://github.com/imviidx/sentry-consent-integration#readme",
   "dependencies": {
-    "@sentry/react": "^8.29.0",
+    "@sentry/browser": "^8.29.0",
+    "@sentry/core": "^8.29.0",
     "@sentry/types": "^8.29.0"
   },
   "devDependencies": {

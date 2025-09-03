@@ -1,7 +1,10 @@
-// Import types from Sentry core to ensure compatibility
-import type { Event, Integration as SentryIntegration } from '@sentry/core';
-import * as Sentry from '@sentry/react';
-import type { EventHint } from '@sentry/react';
+// Import from Sentry browser for broader compatibility
+import * as Sentry from '@sentry/browser';
+import type {
+  Event,
+  EventHint,
+  Integration as SentryIntegration,
+} from '@sentry/core';
 
 import { logEvent } from './eventLogger';
 import { SENTRY_DEFAULT_CONFIG } from './configurationKeys';

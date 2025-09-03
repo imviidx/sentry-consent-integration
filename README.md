@@ -5,7 +5,7 @@
 
 A TypeScript integration that dynamically adjusts Sentry configuration based on user consent preferences, ensuring GDPR and privacy compliance while maintaining optimal error tracking and performance monitoring.
 
-**🌐 [Live Demo](https://pod666.github.io/sentry-consent-integration/)**
+**🌐 [Live Demo](https://imviidx.github.io/sentry-consent-integration/)**
 
 ## What's New in 2.0.0
 
@@ -62,13 +62,13 @@ sentryConsentIntegration({
 npm install sentry-consent-integration
 ```
 
-**Note**: This package requires `@sentry/react` (or another Sentry SDK) and `@sentry/types` as peer dependencies in your project.
+**Note**: This package requires a Sentry browser SDK (`@sentry/browser`, `@sentry/react`, `@sentry/vue`, etc.) and `@sentry/types` as peer dependencies in your project.
 
 ### Basic Usage
 
 ```typescript
 import { sentryConsentIntegration } from 'sentry-consent-integration';
-import * as Sentry from '@sentry/react';
+import * as Sentry from '@sentry/browser'; // or @sentry/react, @sentry/vue, etc.
 
 Sentry.init({
   dsn: 'your-sentry-dsn',
@@ -336,7 +336,7 @@ npm run demo:build
 
 ### Required Peer Dependencies
 
-- `@sentry/react` (^8.29.0 or compatible Sentry SDK)
+- A Sentry browser SDK: `@sentry/browser`, `@sentry/react`, `@sentry/vue`, `@sentry/angular`, etc. (^8.29.0 or compatible)
 - `@sentry/types` (^8.29.0)
 
 ### Package Dependencies
@@ -374,7 +374,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Support
 
-- 🌐 [Live Demo](https://pod666.github.io/sentry-consent-integration/)
+- 🌐 [Live Demo](https://imviidx.github.io/sentry-consent-integration/)
 - 📚 [Demo Documentation](demo/README.md)
-- 🐛 [Issue Tracker](https://github.com/POD666/sentry-consent-integration/issues)
+- 🐛 [Issue Tracker](https://github.com/imviidx/sentry-consent-integration/issues)
 - 📝 [Changelog](CHANGELOG.md)
